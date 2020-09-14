@@ -7,34 +7,7 @@ var crypto = require('crypto');
 var User = require('../models/user');
 var secrets = require('../config/secrets');
 
-// edit password
-
-exports.postNewPassword = function(req, res, next){
-  req.assert('password', 'Password must be at least 6 characters long.').len(6);
-  req.assert('confirm', 'Passwords must match.').equals(req.body.password);
-
-  var errors = req.validationErrors();
-
-  if (errors) {
-    req.flash('errors', errors);
-    return res.redirect(req.redirect.failure);
-  }
-
-  User.findById(req.user.id, function(err, user) {
-    if (err) return next(err);
-
-    user.password = req.body.password;
-
-    user.save(function(err) {
-      if (err) return next(err);
-      req.flash('success', { msg: 'Success! Your password has been changed.' });
-      res.redirect(req.redirect.success);
-    });
-  });
-};
-
 // show forgot password page
-
 exports.getForgotPassword = function(req, res){
   if (req.isAuthenticated()) {
     return res.redirect(req.redirect.auth);
@@ -57,9 +30,7 @@ exports.getForgotPassword = function(req, res){
   });
 };
 
-// post forgot password will create a random token,
-// then sends an email with reset instructions
-
+// post forgot password and have Firebase handle the reset password business logic
 exports.postForgotPassword = function(req, res, next){
   req.assert('email', 'Please enter a valid email address.').isEmail();
 
@@ -73,7 +44,25 @@ exports.postForgotPassword = function(req, res, next){
     return res.redirect(req.redirect.failure);
   }
 
-  async.waterfall([
+  var user = User.initWithUid({
+    'uid': req.body.uid
+  }, function(err, user) {
+    if (err) return next(err);
+
+    var data = model.data();
+
+    if (!data) {
+      return done(null, false, req.flash('error', 'Data for user is unavailable.'));
+    }
+
+    user.updatePasswordForEmailAndPasswordIdentity(function(err, success) {
+      if (err) return next(err);
+      req.flash('success', { msg: 'Success! Your password has been changed.' });
+      res.redirect(req.redirect.success);
+    });
+  });
+
+  /*async.waterfall([
     function(done) {
       crypto.randomBytes(16, function(err, buf) {
         var token = buf.toString('hex');
@@ -118,6 +107,40 @@ exports.postForgotPassword = function(req, res, next){
   ], function(err) {
     if (err) return next(err);
     res.redirect(req.redirect.success);
+  });*/
+};
+
+// Not in user
+/* 
+
+// Edit password
+exports.postNewPassword = function(req, res, next){
+  req.assert('password', 'Password must be at least 6 characters long.').len(6);
+  req.assert('confirm', 'Passwords must match.').equals(req.body.password);
+
+  var errors = req.validationErrors();
+
+  if (errors) {
+    req.flash('errors', errors);
+    return res.redirect(req.redirect.failure);
+  }
+
+  var user = User.initWithUid({
+    'uid': req.user.id
+  }, function(err, user) {
+    if (err) return next(err);
+
+    var data = model.data();
+
+    if (!data) {
+      return done(null, false, req.flash('error', 'Data for user is unavailable.'));
+    }
+
+    user.updatePasswordForEmailAndPasswordIdentity(function(err, success) {
+      if (err) return next(err);
+      req.flash('success', { msg: 'Success! Your password has been changed.' });
+      res.redirect(req.redirect.success);
+    });
   });
 };
 
@@ -213,3 +236,5 @@ exports.postToken = function(req, res, next){
     res.redirect(req.redirect.success);
   });
 };
+
+*/

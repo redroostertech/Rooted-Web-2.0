@@ -1,5 +1,5 @@
-var LocalStrategy = require('passport-local').Strategy;
-var User = require('../models/user');
+var LocalStrategy                     = require('passport-local').Strategy;
+var User                              = require('../models/user');
 
 module.exports = function(passport){
 
@@ -8,8 +8,8 @@ module.exports = function(passport){
   });
 
   passport.deserializeUser(function(id, done) {
-    User.findById(id, function(err, user) {
-      done(err, user);
+    User.initWithId(id, function(err, data) {
+      done(err, data);
     });
   });
 
@@ -18,27 +18,26 @@ module.exports = function(passport){
       usernameField: 'email',
       passReqToCallback : true
     },
-    function(req, email, password, done) {
+    function(req, email, password, done) {  
+      User.loginWithEmailAndPasswordIdentity({ 
+        'email': email,
+        'password': password,
+      }, function(error, user) {
+        if (error) return done(error);
 
-      User.findOne({ 'email' :  email },
-        function(err, user) {
-          if (err) return done(err);
-          if (!user){
-            return done(null, false, req.flash('error', 'User not found'));
-          }
-          user.comparePassword(password, function(err, isMatch) {
-            if (isMatch) {
-              var time = 14 * 24 * 3600000;
-              req.session.cookie.maxAge = time; //2 weeks
-              req.session.cookie.expires = new Date(Date.now() + time);
-              req.session.touch();
-              return done(null, user, req.flash('success', 'Successfully logged in.'));
-            } else {
-              return done(null, false, req.flash('error', 'Invalid Password'));
-            }
-          });
+        if(!user) {
+          return done({message: 'Data for user is unavailable.'}, null, req.flash('error', 'Data for user is unavailable.'));
         }
-      );
+
+        console.log(user);
+        
+        var time = 14 * 24 * 3600000;
+        req.session.cookie.maxAge = time; //2 weeks
+        req.session.cookie.expires = new Date(Date.now() + time);
+        req.session.touch();
+
+        return done(null, user, req.flash('success', 'Successfully logged in.'));
+      });
     })
   );
 
@@ -47,28 +46,34 @@ module.exports = function(passport){
       passReqToCallback : true
     },
     function(req, email, password, done) {
-      var findOrCreateUser = function(){
-        User.findOne({ email: req.body.email }, function(err, existingUser) {
-          if (existingUser) {
+      var findOrCreateUser = function() {
+
+        var registeredUser = User.signupUserWithEmailAndPasswordIdentity({
+          email: req.body.email,
+          password: req.body.password,
+          full_name: req.body.full_name,
+          phone_number_string: req.body.phone_number_string,
+        }, function(e, model) {
+          if (e) {
             req.flash('form', {
               email: req.body.email
             });
-            return done(null, false, req.flash('error', 'An account with that email address already exists.'));
+            return done(null, false, req.flash('error', error.message));
           }
-          // edit this portion to accept other properties when creating a user.
-          var user = new User({
-            email: req.body.email,
-            password: req.body.password // user schema pre save task hashes this password
-          });
 
-          user.save(function(err) {
-            if (err) return done(err, false, req.flash('error', 'Error saving user.'));
-            var time = 14 * 24 * 3600000;
-            req.session.cookie.maxAge = time; //2 weeks
-            req.session.cookie.expires = new Date(Date.now() + time);
-            req.session.touch();
-            return done(null, user, req.flash('success', 'Thanks for signing up!!'));
-          });
+          var user = model.getData();
+
+          if(!user) {
+            return done(null, false, req.flash('error', 'Data for user is unavailable.'));
+          }
+
+          var time = 14 * 24 * 3600000;
+          req.session.cookie.maxAge = time; //2 weeks
+          req.session.cookie.expires = new Date(Date.now() + time);
+          req.session.touch();
+
+          return done(null, user, req.flash('success', 'Thanks for signing up!!'));
+      
         });
       };
 
@@ -76,4 +81,5 @@ module.exports = function(passport){
 
     })
   );
+
 };

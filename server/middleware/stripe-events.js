@@ -90,25 +90,26 @@ var knownEvents = {
   'customer.subscription.deleted': function(req, res, next) {
     console.log(req.stripeEvent.type + ': event processed');
 
-    if(req.stripeEvent.data && req.stripeEvent.data.object && req.stripeEvent.data.object.customer){
+    if (req.stripeEvent.data && req.stripeEvent.data.object && req.stripeEvent.data.object.customer){
       // find user where stripeEvent.data.object.customer
-      User.findOne({
+      var user = User.initWithUid({
         'stripe.customerId': req.stripeEvent.data.object.customer
       }, function (err, user) {
         if (err) return next(err);
-        if(!user){
+
+        if(!user.data) {
           // user does not exist, no need to process
           return res.status(200).end();
         } else {
-          user.stripe.last4 = '';
-          user.stripe.plan = 'free';
-          user.stripe.subscriptionId = '';
-          user.save(function(err) {
-            if (err) return next(err);
-            console.log('user: ' + user.email + ' subscription was successfully cancelled.');
-            return res.status(200).end();
-          });
+          user.data.stripe.last4 = '';
+          user.data.stripe.plan = 'free';
+          user.data.stripe.subscriptionId = '';
         }
+      });
+      user.update(function(err) {
+        if (err) return next(err);
+        console.log('user: ' + user.data.email_address + ' subscription was successfully cancelled.');
+        return res.status(200).end();
       });
     } else {
       return next(new Error('stripeEvent.data.object.customer is undefined'));

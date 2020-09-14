@@ -23,16 +23,22 @@ var stripeWebhook = new StripeWebhook({
 
 module.exports = function (app, passport) {
 
+  /*
   // homepage and dashboard
   app.get('/',
-    setRedirect({auth: '/dashboard'}),
+    setRedirect({ 
+      auth: '/dashboard' 
+    }),
     isUnauthenticated,
     setRender('index'),
     main.getHome);
 
   // sessions
   app.post('/login',
-    setRedirect({auth: '/dashboard', success: '/dashboard', failure: '/'}),
+    setRedirect({ 
+      auth: '/dashboard', 
+      success: '/dashboard', 
+      failure: '/' }),
     isUnauthenticated,
     sessions.postLogin);
   app.get('/logout',
@@ -116,4 +122,6 @@ module.exports = function (app, passport) {
     stripeWebhook.middleware,
     stripeEvents
   );
+
+  */
 };

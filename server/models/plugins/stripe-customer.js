@@ -1,148 +1,124 @@
 'use strict';
 
-var Stripe = require('stripe'),
-stripe;
+var Stripe = require('stripe'), stripe;
+var options;
 
-module.exports = exports = function stripeCustomer (schema, options) {
-  stripe = Stripe(options.apiKey);
+module.exports = {
+  init: function initWith(opts) {
+    options = opts;
+    stripe = Stripe(opts.apiKey);
+    return module.exports;
+  }, 
 
-  schema.add({
-    stripe: {
-      customerId: String,
-      subscriptionId: String,
-      last4: String,
-      plan: {
-        type: String,
-        default: options.defaultPlan
-      }
-    }
-  });
-
-  schema.pre('save', function (next) {
-    var user = this;
-    if(!user.isNew || user.stripe.customerId) return next();
-    user.createCustomer(function(err){
-      if (err) return next(err);
-      next();
-    });
-  });
-
-  schema.statics.getPlans = function () {
+  getPlans: function retrievePlans() {
     return options.planData;
-  };
+  },
 
-  schema.methods.createCustomer = function(cb) {
-    var user = this;
-
+  createCustomer: function createCustomerFrom(user, cb) {
     stripe.customers.create({
-      email: user.email
+      email: user.email_address
     }, function(err, customer){
-      if (err) return cb(err);
-
-      user.stripe.customerId = customer.id;
-      return cb();
+      if (err) return cb(err, null);
+      return cb(null, customer.id);
     });
-  };
+  },
 
-  schema.methods.setCard = function(stripe_token, cb) {
-    var user = this;
-
+  setCard: function setCardFor(user, stripeToken, cb) {
     var cardHandler = function(err, customer) {
-      if (err) return cb(err);
-
-      if(!user.stripe.customerId){
-        user.stripe.customerId = customer.id;
+      if (err) return cb(err, null);
+      var results;
+      if (!user.stripe.customer_id) {
+        // Create card
+        results[customerId] = customer.id;
       }
 
       var card = customer.cards ? customer.cards.data[0] : customer.sources.data[0];
-      
-      user.stripe.last4 = card.last4;
-      user.save(function(err){
-        if (err) return cb(err);
-        return cb(null);
-      });
+      results[lastFour] = card.last4;
+      cb(null, results);
     };
 
-    if(user.stripe.customerId){
-      stripe.customers.update(user.stripe.customerId, {card: stripe_token}, cardHandler);
+    if (user.stripe.customer_id) {
+      stripe.customers.update(user.stripe.customer_id, { 
+        card: stripeToken
+      }, cardHandler);
     } else {
       stripe.customers.create({
-        email: user.email,
-        card: stripe_token
+        email: user.email_address,
+        card: stripeToken
       }, cardHandler);
     }
-  };
+  },
 
-  schema.methods.setPlan = function(plan, stripe_token, cb) {
-    var user = this,
-    customerData = {
-      plan: plan
-    };
-
+  setPlan: function setPlanFor(user, plan, stripeToken, cb) {
     var subscriptionHandler = function(err, subscription) {
-      if(err) return cb(err);
-
-      user.stripe.plan = plan;
-      user.stripe.subscriptionId = subscription.id;
-      user.save(function(err){
-        if (err) return cb(err);
-        return cb(null);
+      if (err) return cb(err, null);
+      return (null, {
+        stripePlan: plan,
+        subscriptionId: subscription.id
       });
     };
 
-    var createSubscription = function(){
+    var createSubscription = function() {
       stripe.customers.createSubscription(
-        user.stripe.customerId,
-        {plan: plan},
+        user.stripe.customer_id,
+        {
+          plan: plan
+        },
         subscriptionHandler
       );
     };
 
-    if(stripe_token) {
-      user.setCard(stripe_token, function(err){
-        if (err) return cb(err);
+    if (stripeToken) {
+      this.setCard(user, stripeToken, function(err, user) {
+        if (err) return cb(err, null);
         createSubscription();
       });
-
-
     } else {
-      if (user.stripe.subscriptionId){
+      if (user.stripe.subscription_id) {
         // update subscription
         stripe.customers.updateSubscription(
-          user.stripe.customerId,
-          user.stripe.subscriptionId,
-          { plan: plan },
+          user.stripe.customer_id,
+          user.stripe.subscription_id,
+          { 
+            plan: plan
+          },
           subscriptionHandler
         );
       } else {
         createSubscription();
       }
     }
-  };
+  },
 
-  schema.methods.updateStripeEmail = function(cb){
-    var user = this;
-
-    if(!user.stripe.customerId) return cb();
-
-    stripe.customers.update(user.stripe.customerId, {email: user.email}, function(err, customer) {
-      cb(err);
+  updateEmail: function updateEmailForStripeFor(user, cb) {
+    if (!user.stripe.customer_id) return cb({
+      message: "Something went wrong trying to update email for stripe customer"
+    }, false);
+    stripe.customers.update(user.stripe.customer_id, {
+      email: user.email_address
+    }, function(err, customer) {
+      cb(err, true);
     });
-  };
+  },
 
-  schema.methods.cancelStripe = function(cb){
-    var user = this;
-
-    if(user.stripe.customerId){
+  cancelStripe: function cancelStripeFor(user, cb) {
+    if (user.stripe.customer_id) {
       stripe.customers.del(
-        user.stripe.customerId
+        user.stripe.customer_id
       ).then(function(confirmation) {
-        cb();
+        console.log('Stripe confirmation');
+        console.log(confirmation);
+        cb(null, true);
       }, function(err) {
-        return cb(err);
+        if (err) return cb(err, false)
+        cb({
+          'message': 'Something went wrong when trying to delete stripe information for user.'
+        }, false);
       });
     } else {
-      cb();
+      return cb({
+        'message': 'Stripe customer does not exist for user.'
+      }, false);
     }
-  };
-};
+  }
+}

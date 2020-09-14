@@ -1,7 +1,7 @@
 'use strict';
 
 var User = require('../models/user'),
-plans = User.getPlans();
+plans = User.stripe().getPlans();
 
 exports.getDefault = function(req, res, next){
   var form = {},

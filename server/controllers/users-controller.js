@@ -20,7 +20,6 @@ exports.getProfile = function(req, res, next){
 };
 
 // Updates generic profile information
-
 exports.postProfile = function(req, res, next){
   req.assert('email', 'Email is not valid').isEmail();
   req.assert('name', 'Name is required').notEmpty();
